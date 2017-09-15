@@ -61,5 +61,28 @@ def renamed_prog(ops):
 		else:
 			ret += '\n'
 
+	ret += '\n'
+
+	for op in ops:
+		ret += word_mapping[op.opcode]
+		# ARITHOP
+		if op.op1 != None and op.op2 != None and op.op3 != None:
+			ret += (" r" + str(op.op1.pr) + ",r" + str(op.op2.pr) + " => r" + str(op.op3.pr) + '\n') 
+		# load
+		elif op.opcode == 0:
+			ret += (" r" + str(op.op1.pr) + " => r" + str(op.op3.pr) + '\n')
+		# store
+		elif op.opcode == 2:
+			ret += (" r" + str(op.op1.pr) + " => r" + str(op.op2.pr) + '\n')
+		# loadI
+		elif op.opcode == 1:
+			ret += (" " + str(op.op1) + " => r" + str(op.op3.pr) + '\n')
+		# output
+		elif op.opcode == 8:
+			ret += (" " + str(op.op1) + '\n')
+		# nop
+		else:
+			ret += '\n'
+
 	return ret
 

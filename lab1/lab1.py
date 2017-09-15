@@ -7,6 +7,9 @@ from op_list import IROperand
 from op_list import Op
 import utils
 
+# TODO:
+#	- spill values
+
 ## GLOBAL VARIABLES ##
 
 scan_i = 0
@@ -16,16 +19,25 @@ vr_name = 0
 largest_sr = 0
 sr_to_vr = []
 lu = []
+maxlive = 0
+
+available_pr = []
+all_pr = []
+
+vr_to_pr = []
+pr_to_vr = []
+pr_next_use = []
 
 
 ## MAIN METHODS ##
 
 
-def alloc(filename):
+def alloc(filename, k):
 	f = open(filename, 'r')
 	prog = f.read()
 	ops = parser(list(prog))
 	rename_registers(ops)
+	bottom_up_alloc(ops, k)
 	return utils.renamed_prog(ops)
 
 
@@ -332,6 +344,9 @@ def parser(block):
 
 
 def rename_registers(ops):
+	global maxlive
+	live_values = []
+
 	for i in xrange(len(ops)-1, -1, -1):
 		# ARITHOP
 		if ops[i].op1 != None and ops[i].op2 != None and ops[i].op3 != None:
@@ -342,6 +357,10 @@ def rename_registers(ops):
 			update(ops[i].op1, i)	# update one use
 			update(ops[i].op2, i)	# update other use
 
+			distinct_add(live_values, ops[i].op1.vr)
+			distinct_add(live_values, ops[i].op2.vr)
+			live_values.remove(ops[i].op3.vr)
+
 		# load
 		elif ops[i].opcode == 0:
 			update(ops[i].op3, i)	# update and kill
@@ -350,16 +369,105 @@ def rename_registers(ops):
 
 			update(ops[i].op1, i)	# update one use
 
+			distinct_add(live_values, ops[i].op1.vr)
+			live_values.remove(ops[i].op3.vr)
+
 		# store
 		elif ops[i].opcode == 2:
 			update(ops[i].op1, i)	# update one use
 			update(ops[i].op2, i)	# update other use
+
+			distinct_add(live_values, ops[i].op1.vr)
+			distinct_add(live_values, ops[i].op2.vr)
 
 		# LOADI
 		elif ops[i].opcode == 1:
 			update(ops[i].op3, i)	# update and kill
 			sr_to_vr[ops[i].op3.sr] = -1
 			lu[ops[i].op3.sr] = float('inf')
+
+			live_values.remove(ops[i].op3.vr)
+
+		if len(live_values) > maxlive:
+			maxlive = len(live_values)
+
+
+def bottom_up_alloc(ops, k):
+	global available_pr
+	global all_pr
+	global vr_to_pr
+	global pr_to_vr
+	global pr_next_use
+
+	if maxlive > k:
+		available_pr = range(k-2,-1,-1)
+		all_pr = range(k-2,-1,-1)
+	else:
+		available_pr = range(k-1,-1,-1)
+		all_pr = range(k-1,-1,-1)
+
+	vr_to_pr = [None] * (vr_name)
+	pr_to_vr = [None] * len(all_pr)
+	pr_next_use = [float('inf')] * len(all_pr)
+
+	for op in ops:
+		if op.opcode != 1 and op.opcode != 8:
+			if op.op1.pr is None:
+				prx = vr_to_pr[op.op1.vr]
+				if prx is None:
+					prx = get_pr(True)
+				vr = op.op1.vr
+				vr_to_pr[vr] = prx
+				pr_to_vr[prx] = vr
+				pr_next_use[prx] = op.op1.nu
+				op.op1.pr = prx
+				# load op.op1.vr into x
+
+			if op.op1.nu == float('inf'):
+				# free the corresponding pr
+				free_pr = op.op1.pr
+				if free_pr not in available_pr:
+					available_pr.append(free_pr)
+
+		if op.opcode != 0 and op.opcode != 1 and op.opcode != 8: 
+			if op.op2.pr is None:
+				pry = vr_to_pr[op.op2.vr]
+				if pry is None:
+					pry = get_pr(True)
+				vr = op.op2.vr
+				vr_to_pr[vr] = pry
+				pr_to_vr[pry] = vr
+				pr_next_use[pry] = op.op2.nu
+				op.op2.pr = pry
+				# load op.op2.vr into y
+
+			if op.op2.nu == float('inf'):
+				# free the corresponding pr
+				free_pr = op.op2.pr
+				if free_pr not in available_pr:
+					available_pr.append(free_pr)
+
+		if op.opcode != 1 and op.opcode != 8:
+			if op.op1.nu == float('inf'):
+				# free the corresponding pr
+				free_pr = op.op1.pr
+				if free_pr not in available_pr:
+					available_pr.append(free_pr)
+
+		if op.opcode != 0 and op.opcode != 1 and op.opcode != 8: 
+			if op.op2.nu == float('inf'):
+				# free the corresponding pr
+				free_pr = op.op2.pr
+				if free_pr not in available_pr:
+					available_pr.append(free_pr)
+
+		if op.opcode != 2 and op.opcode != 8:
+			prz = get_pr(False)
+			vr = op.op3.vr
+			vr_to_pr[vr] = prz
+			pr_to_vr[prz] = vr
+			pr_next_use[prz] = op.op3.nu
+			op.op3.pr = prz
 
 
 ## HELPER METHODS ##
@@ -488,8 +596,14 @@ def next_token(block):
 	return token
 
 
+def distinct_add(arr, x):
+	if x not in arr:
+		arr.append(x)
+
+
 def update(op, index):
 	global vr_name
+
 	if sr_to_vr[op.sr] == -1:	# sr has no vr
 		sr_to_vr[op.sr] = vr_name
 		vr_name += 1
@@ -498,7 +612,30 @@ def update(op, index):
 	lu[op.sr] = index
 
 
+def get_pr(is_use):
+	if len(available_pr) > 0:
+		return available_pr.pop()
+	else:
+		pr = get_farthest_nu()
+		# spill current contents of pr to register k-1
+		return pr
+
+	# if a pr is available
+		# use the prx to hold the vr
+		# restore the value from mem (for a use) or
+		# use the prx as the target reg (for a def)
+	# else
+		# select pr whose next use is farthest in future (pry)
+		# spill current contents of pry to mem (spill loc)
+		# use pry to hold vr, as discussed above
+
+
+def get_farthest_nu():
+	return pr_next_use.index(max(pr_next_use))
+
+
 ## RUN SCRIPT ##
-print alloc(sys.argv[2])
+#print alloc(sys.argv[2])
+print alloc('test_code', 3)
 
 
