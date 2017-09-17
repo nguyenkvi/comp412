@@ -5,6 +5,7 @@
 import sys
 from op_list import IROperand
 from op_list import Op
+from register_class import RegClass
 import utils
 
 ## GLOBAL VARIABLES ##
@@ -17,15 +18,18 @@ largest_sr = 0
 sr_to_vr = []
 lu = []
 
+maxlive = 0
+
 
 ## MAIN METHODS ##
 
 
-def alloc(filename):
+def alloc(filename, k):
 	f = open(filename, 'r')
 	prog = f.read()
 	ops = parser(list(prog))
 	rename_registers(ops)
+	local_alloc(ops, k)
 	return utils.renamed_prog(ops)
 
 
@@ -332,6 +336,9 @@ def parser(block):
 
 
 def rename_registers(ops):
+	global maxlive
+	live_values = []
+
 	for i in xrange(len(ops)-1, -1, -1):
 		# ARITHOP
 		if ops[i].op1 != None and ops[i].op2 != None and ops[i].op3 != None:
@@ -342,6 +349,10 @@ def rename_registers(ops):
 			update(ops[i].op1, i)	# update one use
 			update(ops[i].op2, i)	# update other use
 
+			distinct_add(live_values, ops[i].op1.vr)
+			distinct_add(live_values, ops[i].op2.vr)
+			live_values.remove(ops[i].op3.vr)
+
 		# load
 		elif ops[i].opcode == 0:
 			update(ops[i].op3, i)	# update and kill
@@ -350,16 +361,104 @@ def rename_registers(ops):
 
 			update(ops[i].op1, i)	# update one use
 
+			distinct_add(live_values, ops[i].op1.vr)
+			live_values.remove(ops[i].op3.vr)
+
 		# store
 		elif ops[i].opcode == 2:
 			update(ops[i].op1, i)	# update one use
 			update(ops[i].op2, i)	# update other use
+
+			distinct_add(live_values, ops[i].op1.vr)
+			distinct_add(live_values, ops[i].op2.vr)
 
 		# LOADI
 		elif ops[i].opcode == 1:
 			update(ops[i].op3, i)	# update and kill
 			sr_to_vr[ops[i].op3.sr] = -1
 			lu[ops[i].op3.sr] = float('inf')
+
+			live_values.remove(ops[i].op3.vr)
+
+		if len(live_values) > maxlive:
+			maxlive = len(live_values)
+			maxlive = len(live_values)
+
+
+def local_alloc(ops, k):
+	if maxlive > k:
+		k -= 1
+
+	regclass = RegClass(k)
+
+	for op in ops:
+		# op r1, r2 => r3
+		if op.opcode != 0 and op.opcode != 1 and op.opcode != 2 and op.opcode != 8:
+			prx = ensure(op.op1.vr, regclass)
+			pry = ensure(op.op2.vr, regclass)
+
+			if op.op1.nu == float('inf'):
+				free(prx, regclass)
+
+			if op.op2.nu == float('inf'):
+				free(pry, regclass)
+
+			prz = allocate(op.op3.vr, regclass)
+
+			op.op1.pr = prx
+			op.op2.pr = pry
+			op.op3.pr = prz
+
+			if op.op1.nu != float('inf'):
+				regclass.next[prx] = op.op1.nu
+
+			if op.op2.nu != float('inf'):
+				regclass.next[pry] = op.op2.nu		
+
+			regclass.next[prz] = op.op3.nu
+
+		# op r1 => r3 (load)
+		elif op.opcode == 0:
+			prx = ensure(op.op1.vr, regclass)
+
+			if op.op1.nu == float('inf'):
+				free(prx, regclass)
+
+			prz = allocate(op.op3.vr, regclass)
+
+			op.op1.pr = prx
+			op.op3.pr = prz
+
+			if op.op1.nu != float('inf'):
+				regclass.next[prx] = op.op1.nu	
+
+			regclass.next[prz] = op.op3.nu
+		
+		# op r1, r2 (store)
+		elif op.opcode == 2:
+			prx = ensure(op.op1.vr, regclass)
+			pry = ensure(op.op2.vr, regclass)
+
+			if op.op1.nu == float('inf'):
+				free(prx, regclass)
+
+			if op.op2.nu == float('inf'):
+				free(pry, regclass)
+
+			op.op1.pr = prx
+			op.op2.pr = pry
+
+			if op.op1.nu != float('inf'):
+				regclass.next[prx] = op.op1.nu
+
+			if op.op2.nu != float('inf'):
+				regclass.next[pry] = op.op2.nu		
+
+		# op c => r3 (loadI)
+		elif op.opcode == 1:
+			prz = allocate(op.op3.vr, regclass)
+			op.op3.pr = prz
+			regclass.next[prz] = op.op3.nu
 
 
 ## HELPER METHODS ##
@@ -498,7 +597,47 @@ def update(op, index):
 	lu[op.sr] = index
 
 
-## RUN SCRIPT ##
-print alloc(sys.argv[2])
+def distinct_add(arr, x):
+	if x not in arr:
+		arr.append(x)
 
+
+def ensure(vr, regclass):
+	if vr in regclass.name:
+		return regclass.name.index(vr)
+	else:
+		ret = allocate(vr, regclass)
+		# emit code to move vr into result
+		return ret
+
+
+def allocate(vr, regclass):
+	if regclass.stacktop >= 0:
+		i = pop(regclass)
+	else:
+		i = regclass.next.index(max(regclass.next))
+		# store contents of j
+	regclass.name[i] = vr
+	regclass.next[i] = -1
+	regclass.free[i] = False
+	return i
+
+
+def pop(regclass):
+	ret = regclass.stack[regclass.stacktop]
+	regclass.stacktop -= 1
+	return ret
+
+
+def free(pr, regclass):
+	regclass.stacktop += 1
+	regclass.stack[regclass.stacktop] = pr
+	regclass.name[pr] = None
+	regclass.next[pr] = float('inf')
+	regclass.free[pr] = True
+
+
+## RUN SCRIPT ##
+# print alloc(sys.argv[2])
+print alloc('test_code', 3)
 
