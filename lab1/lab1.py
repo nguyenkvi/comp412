@@ -2,6 +2,9 @@
 # COMP 412
 # Lab 1: Local Register Allocation
 
+# TODO:
+#	- insert spills and restores (create new op table?)
+
 import sys
 from op_list import IROperand
 from op_list import Op
@@ -20,6 +23,10 @@ lu = []
 
 maxlive = 0
 
+spill_addr = 32768
+spill_pr = 0
+vr_to_spill = []
+
 
 ## MAIN METHODS ##
 
@@ -29,8 +36,12 @@ def alloc(filename, k):
 	prog = f.read()
 	ops = parser(list(prog))
 	rename_registers(ops)
-	local_alloc(ops, k)
-	return utils.renamed_prog(ops)
+
+	if k is None:
+		return ops
+
+	new_ops = local_alloc(ops, k)
+	return utils.renamed_prog(new_ops)
 
 
 def scanner(block):
@@ -386,7 +397,14 @@ def rename_registers(ops):
 
 
 def local_alloc(ops, k):
+	global spill_pr
+	global vr_to_spill
+
+	new_ops = []
+	vr_to_spill = [None] * vr_name
+
 	if maxlive > k:
+		spill_pr = k-1
 		k -= 1
 
 	regclass = RegClass(k)
@@ -394,8 +412,8 @@ def local_alloc(ops, k):
 	for op in ops:
 		# op r1, r2 => r3
 		if op.opcode != 0 and op.opcode != 1 and op.opcode != 2 and op.opcode != 8:
-			prx = ensure(op.op1.vr, regclass)
-			pry = ensure(op.op2.vr, regclass)
+			prx = ensure(op.op1.vr, regclass, new_ops)
+			pry = ensure(op.op2.vr, regclass, new_ops)
 
 			if op.op1.nu == float('inf'):
 				free(prx, regclass)
@@ -403,7 +421,7 @@ def local_alloc(ops, k):
 			if op.op2.nu == float('inf'):
 				free(pry, regclass)
 
-			prz = allocate(op.op3.vr, regclass)
+			prz = allocate(op.op3.vr, regclass, new_ops)
 
 			op.op1.pr = prx
 			op.op2.pr = pry
@@ -419,12 +437,12 @@ def local_alloc(ops, k):
 
 		# op r1 => r3 (load)
 		elif op.opcode == 0:
-			prx = ensure(op.op1.vr, regclass)
+			prx = ensure(op.op1.vr, regclass, new_ops)
 
 			if op.op1.nu == float('inf'):
 				free(prx, regclass)
 
-			prz = allocate(op.op3.vr, regclass)
+			prz = allocate(op.op3.vr, regclass, new_ops)
 
 			op.op1.pr = prx
 			op.op3.pr = prz
@@ -436,8 +454,8 @@ def local_alloc(ops, k):
 		
 		# op r1, r2 (store)
 		elif op.opcode == 2:
-			prx = ensure(op.op1.vr, regclass)
-			pry = ensure(op.op2.vr, regclass)
+			prx = ensure(op.op1.vr, regclass, new_ops)
+			pry = ensure(op.op2.vr, regclass, new_ops)
 
 			if op.op1.nu == float('inf'):
 				free(prx, regclass)
@@ -456,9 +474,13 @@ def local_alloc(ops, k):
 
 		# op c => r3 (loadI)
 		elif op.opcode == 1:
-			prz = allocate(op.op3.vr, regclass)
+			prz = allocate(op.op3.vr, regclass, new_ops)
 			op.op3.pr = prz
 			regclass.next[prz] = op.op3.nu
+
+		new_ops.append(op)
+
+	return new_ops
 
 
 ## HELPER METHODS ##
@@ -602,21 +624,22 @@ def distinct_add(arr, x):
 		arr.append(x)
 
 
-def ensure(vr, regclass):
+def ensure(vr, regclass, new_ops):
 	if vr in regclass.name:
 		return regclass.name.index(vr)
 	else:
-		ret = allocate(vr, regclass)
-		# emit code to move vr into result
+		ret = allocate(vr, regclass, new_ops)
+		restore(vr, ret, new_ops)
 		return ret
 
 
-def allocate(vr, regclass):
+def allocate(vr, regclass, new_ops):
 	if regclass.stacktop >= 0:
 		i = pop(regclass)
 	else:
-		i = regclass.next.index(max(regclass.next))
-		# store contents of j
+		j = regclass.next.index(max(regclass.next))
+		i = j
+		spill(vr, j, new_ops)
 	regclass.name[i] = vr
 	regclass.next[i] = -1
 	regclass.free[i] = False
@@ -637,7 +660,55 @@ def free(pr, regclass):
 	regclass.free[pr] = True
 
 
+def spill(vr, pr, new_ops):
+	global spill_addr
+
+	# loadI spill_addr => spill_pr
+	load_op = IROperand()
+	load_op3 = Op(None)
+	load_op3.pr = spill_pr
+	load_op.opcode = 1
+	load_op.op1 = spill_addr
+	load_op.op3 = load_op3
+
+	# store pr => spill_pr
+	store_op = IROperand()
+	store_op1 = Op(None)
+	store_op1.pr = pr
+	store_op2 = Op(None)
+	store_op2.pr = spill_pr
+	store_op.opcode = 2
+	store_op.op1 = store_op1
+	store_op.op2 = store_op2
+
+	new_ops.append(load_op)
+	new_ops.append(store_op)
+	
+	vr_to_spill[vr] = spill_addr
+
+	spill_addr += 4
+
+
+def restore(vr, pr, new_ops):
+	# loadI spill_addr => pr
+	loadI_op = IROperand()
+	loadI_op.op1 = vr_to_spill[vr]
+	loadI_op3 = Op(None)
+	loadI_op3.pr = pr
+	loadI_op.op3 = loadI_op3
+	loadI_op.opcode = 1
+
+	new_ops.append(loadI_op)
+
+
 ## RUN SCRIPT ##
-# print alloc(sys.argv[2])
-print alloc('test_code', 3)
+#print alloc('test_code', 3)
+
+
+if (sys.argv[1] == '-h'):
+	print 'help'
+elif (sys.argv[1] == '-x'):
+	print alloc(sys.argv[2], None)
+else:
+	print alloc(sys.argv[2], sys.argv[1])
 

@@ -40,28 +40,28 @@ def pp_token(token):
 
 def renamed_prog(ops):
 	ret = ""
-	for op in ops:
-		ret += word_mapping[op.opcode]
-		# ARITHOP
-		if op.op1 != None and op.op2 != None and op.op3 != None:
-			ret += (" r" + str(op.op1.vr) + ",r" + str(op.op2.vr) + " => r" + str(op.op3.vr) + '\n') 
-		# load
-		elif op.opcode == 0:
-			ret += (" r" + str(op.op1.vr) + " => r" + str(op.op3.vr) + '\n')
-		# store
-		elif op.opcode == 2:
-			ret += (" r" + str(op.op1.vr) + " => r" + str(op.op2.vr) + '\n')
-		# loadI
-		elif op.opcode == 1:
-			ret += (" " + str(op.op1) + " => r" + str(op.op3.vr) + '\n')
-		# output
-		elif op.opcode == 8:
-			ret += (" " + str(op.op1) + '\n')
-		# nop
-		else:
-			ret += '\n'
+	# for op in ops:
+	# 	ret += word_mapping[op.opcode]
+	# 	# ARITHOP
+	# 	if op.op1 != None and op.op2 != None and op.op3 != None:
+	# 		ret += (" r" + str(op.op1.vr) + ",r" + str(op.op2.vr) + " => r" + str(op.op3.vr) + '\n') 
+	# 	# load
+	# 	elif op.opcode == 0:
+	# 		ret += (" r" + str(op.op1.vr) + " => r" + str(op.op3.vr) + '\n')
+	# 	# store
+	# 	elif op.opcode == 2:
+	# 		ret += (" r" + str(op.op1.vr) + " => r" + str(op.op2.vr) + '\n')
+	# 	# loadI
+	# 	elif op.opcode == 1:
+	# 		ret += (" " + str(op.op1) + " => r" + str(op.op3.vr) + '\n')
+	# 	# output
+	# 	elif op.opcode == 8:
+	# 		ret += (" " + str(op.op1) + '\n')
+	# 	# nop
+	# 	else:
+	# 		ret += '\n'
 
-	ret += '\n\n'
+	# ret += '\n\n'
 
 	for op in ops:
 		ret += word_mapping[op.opcode]
