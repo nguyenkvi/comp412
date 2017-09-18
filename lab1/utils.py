@@ -38,51 +38,53 @@ def pp_token(token):
 	return (word_mapping[token[0]], pos_mapping[token[1]])
 
 
-def renamed_prog(ops):
+def renamed_prog(ops, is_vr, is_pr):
 	ret = ""
-	# for op in ops:
-	# 	ret += word_mapping[op.opcode]
-	# 	# ARITHOP
-	# 	if op.op1 != None and op.op2 != None and op.op3 != None:
-	# 		ret += (" r" + str(op.op1.vr) + ",r" + str(op.op2.vr) + " => r" + str(op.op3.vr) + '\n') 
-	# 	# load
-	# 	elif op.opcode == 0:
-	# 		ret += (" r" + str(op.op1.vr) + " => r" + str(op.op3.vr) + '\n')
-	# 	# store
-	# 	elif op.opcode == 2:
-	# 		ret += (" r" + str(op.op1.vr) + " => r" + str(op.op2.vr) + '\n')
-	# 	# loadI
-	# 	elif op.opcode == 1:
-	# 		ret += (" " + str(op.op1) + " => r" + str(op.op3.vr) + '\n')
-	# 	# output
-	# 	elif op.opcode == 8:
-	# 		ret += (" " + str(op.op1) + '\n')
-	# 	# nop
-	# 	else:
-	# 		ret += '\n'
 
-	# ret += '\n\n'
+	if is_vr:
+		for op in ops:
+			ret += word_mapping[op.opcode]
+			# ARITHOP
+			if op.op1 != None and op.op2 != None and op.op3 != None:
+				ret += (" r" + str(op.op1.vr) + ",r" + str(op.op2.vr) + " => r" + str(op.op3.vr) + '\n') 
+			# load
+			elif op.opcode == 0:
+				ret += (" r" + str(op.op1.vr) + " => r" + str(op.op3.vr) + '\n')
+			# store
+			elif op.opcode == 2:
+				ret += (" r" + str(op.op1.vr) + " => r" + str(op.op2.vr) + '\n')
+			# loadI
+			elif op.opcode == 1:
+				ret += (" " + str(op.op1) + " => r" + str(op.op3.vr) + '\n')
+			# output
+			elif op.opcode == 8:
+				ret += (" " + str(op.op1) + '\n')
+			# nop
+			else:
+				ret += '\n'
 
-	for op in ops:
-		ret += word_mapping[op.opcode]
-		# ARITHOP
-		if op.op1 != None and op.op2 != None and op.op3 != None:
-			ret += (" r" + str(op.op1.pr) + ",r" + str(op.op2.pr) + " => r" + str(op.op3.pr) + '\n') 
-		# load
-		elif op.opcode == 0:
-			ret += (" r" + str(op.op1.pr) + " => r" + str(op.op3.pr) + '\n')
-		# store
-		elif op.opcode == 2:
-			ret += (" r" + str(op.op1.pr) + " => r" + str(op.op2.pr) + '\n')
-		# loadI
-		elif op.opcode == 1:
-			ret += (" " + str(op.op1) + " => r" + str(op.op3.pr) + '\n')
-		# output
-		elif op.opcode == 8:
-			ret += (" " + str(op.op1) + '\n')
-		# nop
-		else:
-			ret += '\n'
+
+	elif is_pr:
+		for op in ops:
+			ret += word_mapping[op.opcode]
+			# ARITHOP
+			if op.op1 != None and op.op2 != None and op.op3 != None:
+				ret += (" r" + str(op.op1.pr) + ",r" + str(op.op2.pr) + " => r" + str(op.op3.pr) + '\n') 
+			# load
+			elif op.opcode == 0:
+				ret += (" r" + str(op.op1.pr) + " => r" + str(op.op3.pr) + '\n')
+			# store
+			elif op.opcode == 2:
+				ret += (" r" + str(op.op1.pr) + " => r" + str(op.op2.pr) + '\n')
+			# loadI
+			elif op.opcode == 1:
+				ret += (" " + str(op.op1) + " => r" + str(op.op3.pr) + '\n')
+			# output
+			elif op.opcode == 8:
+				ret += (" " + str(op.op1) + '\n')
+			# nop
+			else:
+				ret += '\n'
 
 	return ret
 

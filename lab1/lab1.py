@@ -3,7 +3,7 @@
 # Lab 1: Local Register Allocation
 
 # TODO:
-#	- insert spills and restores (create new op table?)
+#	- test code on CLEAR
 
 import sys
 from op_list import IROperand
@@ -26,6 +26,7 @@ maxlive = 0
 spill_addr = 32768
 spill_pr = 0
 vr_to_spill = []
+loadI_pr = []
 
 
 ## MAIN METHODS ##
@@ -38,10 +39,10 @@ def alloc(filename, k):
 	rename_registers(ops)
 
 	if k is None:
-		return ops
+		return utils.renamed_prog(ops, True, False)
 
 	new_ops = local_alloc(ops, k)
-	return utils.renamed_prog(new_ops)
+	return utils.renamed_prog(new_ops, False, True)
 
 
 def scanner(block):
@@ -373,7 +374,8 @@ def rename_registers(ops):
 			update(ops[i].op1, i)	# update one use
 
 			distinct_add(live_values, ops[i].op1.vr)
-			live_values.remove(ops[i].op3.vr)
+			if ops[i].op3.vr in live_values:
+				live_values.remove(ops[i].op3.vr)
 
 		# store
 		elif ops[i].opcode == 2:
@@ -393,12 +395,12 @@ def rename_registers(ops):
 
 		if len(live_values) > maxlive:
 			maxlive = len(live_values)
-			maxlive = len(live_values)
 
 
 def local_alloc(ops, k):
 	global spill_pr
 	global vr_to_spill
+	global loadI_vr
 
 	new_ops = []
 	vr_to_spill = [None] * vr_name
@@ -435,6 +437,8 @@ def local_alloc(ops, k):
 
 			regclass.next[prz] = op.op3.nu
 
+			new_ops.append(op)
+
 		# op r1 => r3 (load)
 		elif op.opcode == 0:
 			prx = ensure(op.op1.vr, regclass, new_ops)
@@ -451,6 +455,8 @@ def local_alloc(ops, k):
 				regclass.next[prx] = op.op1.nu	
 
 			regclass.next[prz] = op.op3.nu
+
+			new_ops.append(op)
 		
 		# op r1, r2 (store)
 		elif op.opcode == 2:
@@ -470,15 +476,22 @@ def local_alloc(ops, k):
 				regclass.next[prx] = op.op1.nu
 
 			if op.op2.nu != float('inf'):
-				regclass.next[pry] = op.op2.nu		
+				regclass.next[pry] = op.op2.nu	
+
+			new_ops.append(op)	
 
 		# op c => r3 (loadI)
 		elif op.opcode == 1:
+			vr_to_spill[op.op3.vr] = op.op1
 			prz = allocate(op.op3.vr, regclass, new_ops)
 			op.op3.pr = prz
+			loadI_pr.append(prz)
 			regclass.next[prz] = op.op3.nu
+			new_ops.append(op)
 
-		new_ops.append(op)
+		# op c
+		elif op.opcode == 8:
+			new_ops.append(op)
 
 	return new_ops
 
@@ -639,7 +652,9 @@ def allocate(vr, regclass, new_ops):
 	else:
 		j = regclass.next.index(max(regclass.next))
 		i = j
+		print regclass.next
 		spill(vr, j, new_ops)
+		#print "spilling " + str(j)
 	regclass.name[i] = vr
 	regclass.next[i] = -1
 	regclass.free[i] = False
@@ -662,6 +677,9 @@ def free(pr, regclass):
 
 def spill(vr, pr, new_ops):
 	global spill_addr
+
+	if pr in loadI_pr:
+		return
 
 	# loadI spill_addr => spill_pr
 	load_op = IROperand()
@@ -702,13 +720,12 @@ def restore(vr, pr, new_ops):
 
 
 ## RUN SCRIPT ##
-#print alloc('test_code', 3)
-
+#print alloc('test_code', 7)
 
 if (sys.argv[1] == '-h'):
 	print 'help'
 elif (sys.argv[1] == '-x'):
 	print alloc(sys.argv[2], None)
 else:
-	print alloc(sys.argv[2], sys.argv[1])
+	print alloc(sys.argv[2], int(sys.argv[1]))
 
