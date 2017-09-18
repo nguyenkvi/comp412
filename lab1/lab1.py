@@ -652,9 +652,7 @@ def allocate(vr, regclass, new_ops):
 	else:
 		j = regclass.next.index(max(regclass.next))
 		i = j
-		print regclass.next
 		spill(vr, j, new_ops)
-		#print "spilling " + str(j)
 	regclass.name[i] = vr
 	regclass.next[i] = -1
 	regclass.free[i] = False
