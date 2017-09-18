@@ -652,7 +652,7 @@ def allocate(vr, regclass, new_ops):
 	else:
 		j = regclass.next.index(max(regclass.next))
 		i = j
-		spill(vr, j, new_ops)
+		spill(regclass.name[j], j, new_ops)
 	regclass.name[i] = vr
 	regclass.next[i] = -1
 	regclass.free[i] = False
@@ -676,16 +676,16 @@ def free(pr, regclass):
 def spill(vr, pr, new_ops):
 	global spill_addr
 
-	if pr in loadI_pr:
-		return
+	# if pr in loadI_pr:
+	# 	return
 
 	# loadI spill_addr => spill_pr
-	load_op = IROperand()
-	load_op3 = Op(None)
-	load_op3.pr = spill_pr
-	load_op.opcode = 1
-	load_op.op1 = spill_addr
-	load_op.op3 = load_op3
+	loadI_op = IROperand()
+	loadI_op3 = Op(None)
+	loadI_op3.pr = spill_pr
+	loadI_op.opcode = 1
+	loadI_op.op1 = spill_addr
+	loadI_op.op3 = loadI_op3
 
 	# store pr => spill_pr
 	store_op = IROperand()
@@ -697,7 +697,7 @@ def spill(vr, pr, new_ops):
 	store_op.op1 = store_op1
 	store_op.op2 = store_op2
 
-	new_ops.append(load_op)
+	new_ops.append(loadI_op)
 	new_ops.append(store_op)
 	
 	vr_to_spill[vr] = spill_addr
@@ -706,19 +706,29 @@ def spill(vr, pr, new_ops):
 
 
 def restore(vr, pr, new_ops):
-	# loadI spill_addr => pr
+	# loadI spill_addr => spill_pr
 	loadI_op = IROperand()
 	loadI_op.op1 = vr_to_spill[vr]
 	loadI_op3 = Op(None)
-	loadI_op3.pr = pr
+	loadI_op3.pr = spill_pr
 	loadI_op.op3 = loadI_op3
 	loadI_op.opcode = 1
 
-	new_ops.append(loadI_op)
+	# load spill_pr => pr
+	load_op = IROperand()
+	load_op1 = Op(None)
+	load_op1.pr = spill_pr
+	load_op3 = Op(None)
+	load_op3.pr = pr
+	load_op.op1 = load_op1
+	load_op.op3 = load_op3
+	load_op.opcode = 0
 
+	new_ops.append(loadI_op)
+	new_ops.append(load_op)
 
 ## RUN SCRIPT ##
-#print alloc('test_code', 7)
+# print alloc('test_code', 5)
 
 if (sys.argv[1] == '-h'):
 	print 'help'
