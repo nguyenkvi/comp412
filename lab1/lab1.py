@@ -335,18 +335,6 @@ def parser(block):
 
 	return parsed_block
 
-	# prev_node = None
-
-	# while block:
-	# 	node = parser_helper(block)
-	# 	node.set_prev(prev_node)
-	# 	if prev_node != None:
-	# 		prev_node.set_next(node)
-	# 	prev_node = node
-
-	# return node
-
-
 def rename_registers(ops):
 	global maxlive
 	live_values = []
@@ -676,7 +664,8 @@ def free(pr, regclass):
 def spill(vr, pr, new_ops):
 	global spill_addr
 
-	# if pr in loadI_pr:
+	# if loadI_addr:
+	# 	vr_to_spill[vr] = loadI_addr
 	# 	return
 
 	# loadI spill_addr => spill_pr
@@ -728,7 +717,7 @@ def restore(vr, pr, new_ops):
 	new_ops.append(load_op)
 
 ## RUN SCRIPT ##
-# print alloc('test_code', 5)
+#print alloc('test_code', 5)
 
 if (sys.argv[1] == '-h'):
 	print 'help'
