@@ -335,6 +335,7 @@ def parser(block):
 
 	return parsed_block
 
+
 def rename_registers(ops):
 	global maxlive
 	live_values = []
@@ -664,10 +665,6 @@ def free(pr, regclass):
 def spill(vr, pr, new_ops):
 	global spill_addr
 
-	# if loadI_addr:
-	# 	vr_to_spill[vr] = loadI_addr
-	# 	return
-
 	# loadI spill_addr => spill_pr
 	loadI_op = IROperand()
 	loadI_op3 = Op(None)
@@ -720,9 +717,13 @@ def restore(vr, pr, new_ops):
 #print alloc('test_code', 5)
 
 if (sys.argv[1] == '-h'):
-	print 'help'
+	f = open('helpflag', 'r')
+	print f.read()
 elif (sys.argv[1] == '-x'):
 	print alloc(sys.argv[2], None)
 else:
-	print alloc(sys.argv[2], int(sys.argv[1]))
+	k = int(sys.argv[1])
+	if k < 3 or k > 64:
+		print "412alloc requires 3 <= k <= 64"
+	print alloc(sys.argv[2], k)
 

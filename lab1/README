@@ -1,0 +1,21 @@
+//NAME: Vi Nguyen
+//NETID: vkn1
+
+### BUILDING AND INVOKING 412ALLOC ###
+
+Simply run the following command while in the directory in which `412alloc` is located in order to invoke `412alloc`:
+
+	./412alloc [-h] [-x <filename>] [k <filename>]
+
+If `412alloc` is not executable, run the following command first:
+
+	chmod a+x 412alloc
+
+
+### COMMAND LINE ARGUMENTS ###
+
+[-h] Produces a list of valid command-line arguments and their descriptions
+
+[-x <filename>] Performs register renaming (not register allocation) on the block conainted within <filename>
+
+[k <filename>] Performs register allocation on the block contained within <filename> on k registers
