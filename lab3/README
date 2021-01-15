@@ -1,0 +1,10 @@
+//NAME: Vi Nguyen
+//NETID: vkn1
+
+Syntax: schedule <filename> [-h]
+		filename is the pathname (absolute or relative) to the input file
+		-h : produces a list of valid command line arguments
+
+To invoke the scheduler on `input_block.i` to produce `output_block.i`, run:
+
+	./schedule input_block.i > output_block.i

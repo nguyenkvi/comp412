@@ -734,7 +734,6 @@ def restore(vr, pr, new_ops):
 		new_ops.append(loadI_op)
 		new_ops.append(load_op)
 
-
 ## RUN SCRIPT ##
 #print alloc('test_code', 3)
 

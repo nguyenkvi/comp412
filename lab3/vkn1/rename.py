@@ -2,13 +2,8 @@
 # COMP 412
 # Lab 1: Local Register Allocation
 
-# TODO:
-#	- test code on CLEAR
-
-import sys
 from op_list import IROperand
 from op_list import Op
-from register_class import RegClass
 import utils
 
 ## GLOBAL VARIABLES ##
@@ -21,29 +16,16 @@ largest_sr = 0
 sr_to_vr = []
 lu = []
 
-maxlive = 0
-
-spill_addr = 32768
-spill_pr = 0
-vr_to_spill = []
-loadI_pr = []
-loadI_vr_spill = []
-
 
 ## MAIN METHODS ##
 
 
-def alloc(filename, k):
+def rename(filename):
 	f = open(filename, 'r')
 	prog = f.read()
 	ops = parser(list(prog))
 	rename_registers(ops)
-
-	if k is None:
-		return utils.renamed_prog(ops, True, False)
-
-	new_ops = local_alloc(ops, k)
-	return utils.renamed_prog(new_ops, False, True)
+	return ops, vr_name, utils.renamed_prog(ops)
 
 
 def scanner(block):
@@ -336,11 +318,19 @@ def parser(block):
 
 	return parsed_block
 
+	# prev_node = None
+
+	# while block:
+	# 	node = parser_helper(block)
+	# 	node.set_prev(prev_node)
+	# 	if prev_node != None:
+	# 		prev_node.set_next(node)
+	# 	prev_node = node
+
+	# return node
+
 
 def rename_registers(ops):
-	global maxlive
-	live_values = []
-
 	for i in xrange(len(ops)-1, -1, -1):
 		# ARITHOP
 		if ops[i].op1 != None and ops[i].op2 != None and ops[i].op3 != None:
@@ -351,12 +341,6 @@ def rename_registers(ops):
 			update(ops[i].op1, i)	# update one use
 			update(ops[i].op2, i)	# update other use
 
-			distinct_add(live_values, ops[i].op1.vr)
-			distinct_add(live_values, ops[i].op2.vr)
-
-			if ops[i].op3.vr in live_values:
-				live_values.remove(ops[i].op3.vr)
-
 		# load
 		elif ops[i].opcode == 0:
 			update(ops[i].op3, i)	# update and kill
@@ -365,130 +349,16 @@ def rename_registers(ops):
 
 			update(ops[i].op1, i)	# update one use
 
-			distinct_add(live_values, ops[i].op1.vr)
-			if ops[i].op3.vr in live_values:
-				live_values.remove(ops[i].op3.vr)
-
 		# store
 		elif ops[i].opcode == 2:
 			update(ops[i].op1, i)	# update one use
 			update(ops[i].op2, i)	# update other use
-
-			distinct_add(live_values, ops[i].op1.vr)
-			distinct_add(live_values, ops[i].op2.vr)
 
 		# LOADI
 		elif ops[i].opcode == 1:
 			update(ops[i].op3, i)	# update and kill
 			sr_to_vr[ops[i].op3.sr] = -1
 			lu[ops[i].op3.sr] = float('inf')
-
-			if ops[i].op3.vr in live_values:
-				live_values.remove(ops[i].op3.vr)
-
-		if len(live_values) > maxlive:
-			maxlive = len(live_values)
-
-
-def local_alloc(ops, k):
-	global spill_pr
-	global vr_to_spill
-	global loadI_vr_spill
-
-	new_ops = []
-	vr_to_spill = [None] * vr_name
-	loadI_vr_spill = [None] * vr_name
-
-	if maxlive > k:
-		spill_pr = k-1
-		k -= 1
-
-	regclass = RegClass(k)
-
-	for op in ops:
-		# op r1, r2 => r3
-		if op.opcode != 0 and op.opcode != 1 and op.opcode != 2 and op.opcode != 8:
-			prx = ensure(op.op1.vr, regclass, new_ops)
-			pry = ensure(op.op2.vr, regclass, new_ops)
-
-			if op.op1.nu == float('inf'):
-				free(prx, regclass)
-
-			if op.op2.nu == float('inf'):
-				free(pry, regclass)
-
-			prz = allocate(op.op3.vr, regclass, new_ops)
-
-			op.op1.pr = prx
-			op.op2.pr = pry
-			op.op3.pr = prz
-
-			if op.op1.nu != float('inf'):
-				regclass.next[prx] = op.op1.nu
-
-			if op.op2.nu != float('inf'):
-				regclass.next[pry] = op.op2.nu		
-
-			regclass.next[prz] = op.op3.nu
-
-			new_ops.append(op)
-
-		# op r1 => r3 (load)
-		elif op.opcode == 0:
-			prx = ensure(op.op1.vr, regclass, new_ops)
-
-			if op.op1.nu == float('inf'):
-				free(prx, regclass)
-
-			prz = allocate(op.op3.vr, regclass, new_ops)
-
-			op.op1.pr = prx
-			op.op3.pr = prz
-
-			if op.op1.nu != float('inf'):
-				regclass.next[prx] = op.op1.nu	
-
-			regclass.next[prz] = op.op3.nu
-
-			new_ops.append(op)
-		
-		# op r1, r2 (store)
-		elif op.opcode == 2:
-			prx = ensure(op.op1.vr, regclass, new_ops)
-			pry = ensure(op.op2.vr, regclass, new_ops)
-
-			if op.op1.nu == float('inf'):
-				free(prx, regclass)
-
-			if op.op2.nu == float('inf'):
-				free(pry, regclass)
-
-			op.op1.pr = prx
-			op.op2.pr = pry
-
-			if op.op1.nu != float('inf'):
-				regclass.next[prx] = op.op1.nu
-
-			if op.op2.nu != float('inf'):
-				regclass.next[pry] = op.op2.nu	
-
-			new_ops.append(op)	
-
-		# op c => r3 (loadI)
-		elif op.opcode == 1:
-			#vr_to_spill[op.op3.vr] = op.op1
-			prz = allocate(op.op3.vr, regclass, new_ops, op.op1)
-			if prz is not None:
-				op.op3.pr = prz
-				loadI_pr.append(prz)
-				regclass.next[prz] = op.op3.nu
-				new_ops.append(op)
-
-		# op c
-		elif op.opcode == 8:
-			new_ops.append(op)
-
-	return new_ops
 
 
 ## HELPER METHODS ##
@@ -627,125 +497,8 @@ def update(op, index):
 	lu[op.sr] = index
 
 
-def distinct_add(arr, x):
-	if x not in arr:
-		arr.append(x)
-
-
-def ensure(vr, regclass, new_ops):
-	if vr in regclass.name:
-		return regclass.name.index(vr)
-	else:
-		ret = allocate(vr, regclass, new_ops)
-		restore(vr, ret, new_ops)
-		return ret
-
-
-def allocate(vr, regclass, new_ops, is_loadI=None):
-	if regclass.stacktop >= 0:
-		i = pop(regclass)
-	else:
-		if is_loadI:
-			loadI_vr_spill[vr] = is_loadI
-			return None
-		j = regclass.next.index(max(regclass.next))
-		i = j
-		spill(regclass.name[j], j, new_ops, is_loadI)
-	regclass.name[i] = vr
-	regclass.next[i] = -1
-	regclass.free[i] = False
-	return i
-
-
-def pop(regclass):
-	ret = regclass.stack[regclass.stacktop]
-	regclass.stacktop -= 1
-	return ret
-
-
-def free(pr, regclass):
-	regclass.stacktop += 1
-	regclass.stack[regclass.stacktop] = pr
-	regclass.name[pr] = None
-	regclass.next[pr] = float('inf')
-	regclass.free[pr] = True
-
-
-def spill(vr, pr, new_ops, is_loadI=None):
-	global spill_addr
-
-	# loadI spill_addr => spill_pr
-	loadI_op = IROperand()
-	loadI_op3 = Op(None)
-	loadI_op3.pr = spill_pr
-	loadI_op.opcode = 1
-	loadI_op.op1 = spill_addr
-	loadI_op.op3 = loadI_op3
-
-	# store pr => spill_pr
-	store_op = IROperand()
-	store_op1 = Op(None)
-	store_op1.pr = pr
-	store_op2 = Op(None)
-	store_op2.pr = spill_pr
-	store_op.opcode = 2
-	store_op.op1 = store_op1
-	store_op.op2 = store_op2
-
-	new_ops.append(loadI_op)
-	new_ops.append(store_op)
-	
-	vr_to_spill[vr] = spill_addr
-
-	spill_addr += 4
-
-
-def restore(vr, pr, new_ops):
-	if loadI_vr_spill[vr] is not None:
-		# rematerialization
-		loadI_op = IROperand()
-		loadI_op.op1 = loadI_vr_spill[vr]
-		loadI_op3 = Op(None)
-		loadI_op3.pr = pr
-		loadI_op.op3 = loadI_op3
-		loadI_op.opcode = 1
-
-		new_ops.append(loadI_op)
-
-	else:
-		# loadI spill_addr => spill_pr
-		loadI_op = IROperand()
-		loadI_op.op1 = vr_to_spill[vr]
-		loadI_op3 = Op(None)
-		loadI_op3.pr = spill_pr
-		loadI_op.op3 = loadI_op3
-		loadI_op.opcode = 1
-
-		# load spill_pr => pr
-		load_op = IROperand()
-		load_op1 = Op(None)
-		load_op1.pr = spill_pr
-		load_op3 = Op(None)
-		load_op3.pr = pr
-		load_op.op1 = load_op1
-		load_op.op3 = load_op3
-		load_op.opcode = 0
-
-		new_ops.append(loadI_op)
-		new_ops.append(load_op)
-
-
 ## RUN SCRIPT ##
-#print alloc('test_code', 3)
+# print rename('test_code')
+# print alloc(sys.argv[2])
 
-if (sys.argv[1] == '-h'):
-	f = open('helpflag', 'r')
-	print f.read()
-elif (sys.argv[1] == '-x'):
-	print alloc(sys.argv[2], None)
-else:
-	k = int(sys.argv[1])
-	if k < 3 or k > 64:
-		print "412alloc requires 3 <= k <= 64"
-	print alloc(sys.argv[2], k)
 

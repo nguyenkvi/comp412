@@ -1,0 +1,3 @@
+412alloc [-h] Produces a list of valid command-line arguments and their descriptions | 
+[-x <filename>] Performs register renaming (not register allocation) on the block conainted within <filename> | 
+[k <filename>] Performs register allocation on the block contained within <filename> on k registers

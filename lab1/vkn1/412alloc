@@ -1,0 +1,2 @@
+#!/bin/bash
+echo $(python lab1.py $@)
